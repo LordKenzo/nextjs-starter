@@ -11,17 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Start Deployment
-        run: |
-          echo "Starting deployment process"
-          echo "Node version:"
-          node -v
-          echo "NPM version:"
-          npm -v
-
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -29,55 +19,31 @@ jobs:
           node-version: "18"
           cache: "npm"
 
-      - name: Verify package.json
-        run: |
-          echo "Current working directory:"
-          pwd
-          echo "Contents of directory:"
-          ls -la
-          echo "Package.json content:"
-          cat package.json
-
       - name: Install dependencies
         run: |
-          echo "Installing dependencies..."
           npm ci
-          echo "Installed dependencies:"
-          npm list --depth=0
+          # Verifica esplicita che express sia installato
+          npm install express
 
       - name: Build Next.js app
-        run: |
-          echo "Starting build process..."
-          npm run build
-          echo "Build completed. Contents of .next directory:"
-          ls -la .next
+        run: npm run build
 
-      - name: Prepare deployment package
+      - name: Verify build and server
         run: |
-          echo "Creating deployment package..."
-          zip -r release.zip ./* .next
-          echo "Deployment package size:"
-          ls -lh release.zip
+          echo "Verifying build output and server configuration..."
+          ls -la
+          ls -la .next || echo "No .next directory!"
+          cat server.js || echo "No server.js found!"
+
+      - name: Zip artifact for deployment
+        run: |
+          zip -r release.zip . \
+            --exclude "node_modules/*" \
+            --exclude ".git/*"
 
       - name: Deploy to Azure Web App
-        id: deploy
         uses: azure/webapps-deploy@v2
         with:
           app-name: "my-nextjs-webapp"
           publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           package: release.zip
-
-      - name: Post Deployment Status
-        if: always()
-        run: |
-          echo "Deployment Status: ${{ steps.deploy.outcome }}"
-          echo "To check the logs on Azure, visit:"
-          echo "https://portal.azure.com/#@/resource/subscriptions/YOUR-SUBSCRIPTION-ID/resourceGroups/my-nextjs-group/providers/Microsoft.Web/sites/my-nextjs-webapp/logStream"
-
-      - name: Handle Deployment Failure
-        if: failure()
-        run: |
-          echo "Deployment failed. Here's some debugging information:"
-          echo "GitHub Action Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "Last few entries from npm logs (if available):"
-          cat ~/.npm/_logs/* 2>/dev/null || echo "No npm logs found"
