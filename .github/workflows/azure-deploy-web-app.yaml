@@ -2,45 +2,69 @@ name: Deploy Next.js to Azure Web App
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
       - uses: actions/checkout@v3
-
+      
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "18"
-          cache: "npm"
-
+          node-version: '18'
+          
       - name: Install dependencies
         run: |
+          echo "Installing dependencies..."
           npm ci
-          # Verifica esplicita che express sia installato
-          npm install express
-
+          echo "Installing express explicitly..."
+          npm install express --save
+          
       - name: Build Next.js app
-        run: npm run build
-
-      - name: Verify build and server
         run: |
-          echo "Verifying build output and server configuration..."
+          echo "Building Next.js app..."
+          npm run build
+          echo "Build completed"
+        
+      - name: List files before zip
+        run: |
+          echo "Current directory contents:"
           ls -la
-          ls -la .next || echo "No .next directory!"
-          cat server.js || echo "No server.js found!"
-
-      - name: Zip artifact for deployment
+          echo "Server.js content:"
+          cat server.js
+          echo "Package.json content:"
+          cat package.json
+          
+      - name: Zip with production dependencies
         run: |
+          echo "Creating production node_modules..."
+          rm -rf node_modules
+          npm ci --production
+          
+          echo "Creating deployment package..."
           zip -r release.zip . \
-            --exclude "node_modules/*" \
-            --exclude ".git/*"
-
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "node_modules/.cache/*"
+          
+          echo "Final zip contents:"
+          unzip -l release.zip
+          
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: "my-nextjs-webapp"
+          app-name: 'my-nextjs-webapp'
           publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           package: release.zip
+          
+      - name: Post-deployment verification
+        if: always()
+        run: |
+          echo "Deployment completed with status: ${{ job.status }}"
+          echo "Check the following URL after a few minutes:"
+          echo "https://my-nextjs-webapp.azurewebsites.net"
